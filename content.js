@@ -1917,8 +1917,120 @@ function createProfileInfo() {
     color: #262626;
     font-weight: bold;
     margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   `;
   profileContainer.textContent = `@${userId}`;
-  
+
+  // 정보 버튼 추가
+  const infoBtn = document.createElement('button');
+  infoBtn.textContent = '정보';
+  infoBtn.style.cssText = `
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 12px;
+    border: 1px solid #0095f6;
+    background: #fff;
+    color: #0095f6;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
+  infoBtn.onclick = () => {
+    // 이미 모달이 있으면 제거
+    const existingModal = document.getElementById('profile-info-modal');
+    if (existingModal) existingModal.remove();
+
+    // 팔로워 정보
+    const followedUsers = getFollowedUsers();
+    // 검색 설정 정보
+    const searchKeyword = getSavedSearchKeyword();
+
+    // 모달 생성
+    const modalBg = document.createElement('div');
+    modalBg.id = 'profile-info-modal';
+    modalBg.style.cssText = `
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.2);
+      z-index: 1000001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    modalBg.onclick = (e) => {
+      if (e.target === modalBg) modalBg.remove();
+    };
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+      padding: 24px 28px 20px 28px;
+      min-width: 260px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      font-size: 15px;
+      color: #222;
+      position: relative;
+    `;
+
+    // 닫기 버튼
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '닫기';
+    closeBtn.style.cssText = `
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #eee;
+      border: none;
+      border-radius: 4px;
+      padding: 2px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    `;
+    closeBtn.onclick = () => modalBg.remove();
+    modal.appendChild(closeBtn);
+
+    // 검색 키워드
+    const keywordDiv = document.createElement('div');
+    keywordDiv.style.marginBottom = '16px';
+    keywordDiv.innerHTML = `<b>검색 키워드:</b> <span style='color:#0095f6'>${searchKeyword || '없음'}</span>`;
+    modal.appendChild(keywordDiv);
+
+    // 팔로워 리스트
+    const followerTitle = document.createElement('div');
+    followerTitle.innerHTML = `<b>팔로워 목록 (${followedUsers.length}명)</b>`;
+    modal.appendChild(followerTitle);
+
+    const followerList = document.createElement('ul');
+    followerList.style.cssText = 'margin: 8px 0 0 0; padding-left: 18px; max-height: 180px; overflow-y: auto;';
+    if (followedUsers.length === 0) {
+      const li = document.createElement('li');
+      li.textContent = '없음';
+      followerList.appendChild(li);
+    } else {
+      followedUsers.forEach(u => {
+        const li = document.createElement('li');
+        li.textContent = u;
+        followerList.appendChild(li);
+      });
+    }
+    modal.appendChild(followerList);
+
+    modalBg.appendChild(modal);
+    document.body.appendChild(modalBg);
+  };
+
+  profileContainer.appendChild(infoBtn);
   return profileContainer;
-} 
+}
+
+// 임시: @kitchen_freshlife 팔로워 리스트 저장
+(function() {
+  const userId = 'ThreadsId';
+  const followedUsers = [];
+  localStorage.setItem(`followedUsers_${userId}`, JSON.stringify(followedUsers));
+})(); 
