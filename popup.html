@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 300px;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+    }
+    #userList {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .user-item {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .user-item:hover {
+      background-color: #f5f5f5;
+    }
+    .copy-btn {
+      padding: 4px 8px;
+      background-color: #0095f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .copy-btn:hover {
+      background-color: #0081d6;
+    }
+  </style>
+</head>
+<body>
+  <h2>추출된 사용자 목록</h2>
+  <div id="userList"></div>
+  <script src="popup.js"></script>
+</body>
+</html> 

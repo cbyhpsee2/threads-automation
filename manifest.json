@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Threads 자동화",
+  "version": "1.0",
+  "description": "Threads에서 자동으로 좋아요, 리포스트, 답글 작성, 팔로우 기능을 수행하는 확장 프로그램",
+  "permissions": [
+    "storage",
+    "clipboardWrite"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.threads.com/*"],
+      "js": ["config.js", "content.js"]
+    }
+  ],
+  "icons": {
+    "48": "icons/icon48.png"
+  }
+
+} 
