@@ -2000,10 +2000,53 @@ function createProfileInfo() {
     keywordDiv.innerHTML = `<b>검색 키워드:</b> <span style='color:#0095f6'>${searchKeyword || '없음'}</span>`;
     modal.appendChild(keywordDiv);
 
-    // 팔로워 리스트
+    // 팔로워 리스트 섹션
+    const followerSection = document.createElement('div');
+    followerSection.style.marginBottom = '20px';
+
+    // 팔로워 헤더와 버튼 컨테이너
+    const followerHeader = document.createElement('div');
+    followerHeader.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    `;
+
     const followerTitle = document.createElement('div');
     followerTitle.innerHTML = `<b>팔로워 목록 (${followedUsers.length}명)</b>`;
-    modal.appendChild(followerTitle);
+    followerHeader.appendChild(followerTitle);
+
+    // 팔로잉 확인 버튼
+    const checkFollowingBtn = document.createElement('button');
+    checkFollowingBtn.textContent = '팔로잉 확인';
+    checkFollowingBtn.style.cssText = `
+      padding: 4px 12px;
+      background-color: #0095f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    `;
+    checkFollowingBtn.onmouseover = () => {
+      checkFollowingBtn.style.backgroundColor = '#0081d6';
+    };
+    checkFollowingBtn.onmouseout = () => {
+      checkFollowingBtn.style.backgroundColor = '#0095f6';
+    };
+    checkFollowingBtn.onclick = () => {
+      findFollowingUserId();
+      // 1초 후 모달 새로고침
+      setTimeout(() => {
+        modalBg.remove();
+        infoBtn.click();
+      }, 1000);
+    };
+    followerHeader.appendChild(checkFollowingBtn);
+    followerSection.appendChild(followerHeader);
 
     const followerList = document.createElement('ul');
     followerList.style.cssText = 'margin: 8px 0 0 0; padding-left: 18px; max-height: 180px; overflow-y: auto;';
@@ -2018,7 +2061,8 @@ function createProfileInfo() {
         followerList.appendChild(li);
       });
     }
-    modal.appendChild(followerList);
+    followerSection.appendChild(followerList);
+    modal.appendChild(followerSection);
 
     modalBg.appendChild(modal);
     document.body.appendChild(modalBg);
@@ -2033,4 +2077,215 @@ function createProfileInfo() {
   const userId = 'ThreadsId';
   const followedUsers = [];
   localStorage.setItem(`followedUsers_${userId}`, JSON.stringify(followedUsers));
-})(); 
+})();
+
+// 사용자의 홈페이지에서 팔로잉 상태일 때 사용자 아이디 찾기
+function findFollowingUserId() {
+  console.log('findFollowingUserId 호출됨');
+  // 현재 페이지가 사용자의 홈페이지인지 확인
+  if (!window.location.href.includes('threads.com/@')) return;
+
+  // 현재 프로필 사용자 아이디 가져오기
+  const currentProfileLink = document.querySelector('a[href^="/@"]');
+  if (!currentProfileLink) return;
+  const currentUserId = currentProfileLink.getAttribute('href').replace('/@', '');
+
+  // 기존 팔로워 목록 가져오기
+  const followedUsers = getFollowedUsers();
+  let newFollowedUsers = [...followedUsers]; // 새로운 배열 생성
+  let collectedUsers = []; // 새로 수집한 사용자 목록
+
+  // 팔로잉 텍스트가 있는 컨테이너 찾기
+  const followingContainers = document.querySelectorAll('div.x6s0dn4.x78zum5.x1q0g3np.x1iyjqo2.x1qughib.x64yxkv');
+  
+  followingContainers.forEach(container => {
+    // 팔로잉 텍스트가 있는지 확인
+    const followingText = container.querySelector('div.x6ikm8r.x10wlt62.xlyipyv');
+    if (followingText && followingText.textContent === '팔로잉') {
+      // 사용자 링크 찾기
+      const userLink = container.querySelector('a[href^="/@"]');
+      if (userLink) {
+        const href = userLink.getAttribute('href');
+        if (href) {
+          const userId = href.replace('/@', '');
+          // 현재 프로필 사용자와 관련된 모든 경로 제외
+          if (userId !== currentUserId && 
+              !userId.includes('/post/') && 
+              !userId.includes('/replies') && 
+              !userId.includes('/media') && 
+              !userId.includes('/reposts') &&
+              !userId.includes(currentUserId)) {
+            // 수집된 사용자 목록에 추가
+            collectedUsers.push(userId);
+            // 중복되지 않는 경우에만 저장 목록에 추가
+            if (!newFollowedUsers.includes(userId)) {
+              newFollowedUsers.push(userId);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // 차이점 분석
+  console.log('=== 팔로워 분석 ===');
+  console.log('로컬 저장 팔로워 수:', followedUsers.length);
+  console.log('새로 수집한 팔로워 수:', collectedUsers.length);
+  
+  // 로컬에만 있는 팔로워
+  const onlyInLocal = followedUsers.filter(user => !collectedUsers.includes(user));
+  if (onlyInLocal.length > 0) {
+    console.log('로컬에만 있는 팔로워:', onlyInLocal);
+  }
+
+  // 새로 수집된 팔로워
+  const onlyInCollected = collectedUsers.filter(user => !followedUsers.includes(user));
+  if (onlyInCollected.length > 0) {
+    console.log('새로 수집된 팔로워:', onlyInCollected);
+  }
+
+  // 새로운 팔로워가 추가된 경우에만 저장
+  if (newFollowedUsers.length > followedUsers.length) {
+    localStorage.setItem(`followedUsers_${currentUserId}`, JSON.stringify(newFollowedUsers));
+    showToast(`새로운 팔로워 ${newFollowedUsers.length - followedUsers.length}명이 추가되었습니다.`);
+  } else {
+    showToast('새로운 팔로워가 없습니다.');
+  }
+}
+
+// 팔로잉 탭 버튼 클릭 이벤트 리스너 추가
+function setupFollowingButtonListener() {
+  // 탭리스트 찾기
+  const tabList = document.querySelector('div[role="tablist"]');
+  if (!tabList) return;
+
+  // 팔로잉 탭 찾기
+  const followingTab = tabList.querySelector('div[aria-label="팔로잉"]');
+  if (followingTab) {
+    console.log('팔로잉 탭 버튼 찾음');
+    // 이미 이벤트 리스너가 있는지 확인
+    if (!followingTab.hasAttribute('data-listener-added')) {
+      followingTab.setAttribute('data-listener-added', 'true');
+      followingTab.addEventListener('click', () => {
+        console.log('팔로잉 탭 버튼 클릭됨');
+        // 탭이 선택되었는지 확인
+        const isSelected = followingTab.closest('div[role="tab"]').getAttribute('aria-selected') === 'true';
+        if (isSelected) {
+          // 탭이 선택된 후 약간의 지연을 두고 사용자 아이디 찾기
+          setTimeout(() => {
+            findFollowingUserId();
+          }, 1000);
+        }
+      });
+    }
+  }
+}
+
+// MutationObserver 설정
+function setupFollowingButtonObserver() {
+  // 이미 observer가 있다면 제거
+  if (window.followingButtonObserver) {
+    window.followingButtonObserver.disconnect();
+  }
+
+  // 새로운 observer 생성
+  window.followingButtonObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList') {
+        // 탭리스트 찾기
+        const tabList = document.querySelector('div[role="tablist"]');
+        if (tabList) {
+          // 팔로잉 탭이 있는지 확인
+          const followingTab = tabList.querySelector('div[aria-label="팔로잉"]');
+          if (followingTab && !followingTab.hasAttribute('data-listener-added')) {
+            console.log('팔로잉 탭 버튼 동적 감지됨');
+            setupFollowingButtonListener();
+          }
+        }
+      }
+    }
+  });
+
+  // body 요소의 변경 감시
+  window.followingButtonObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+}
+
+// 팔로잉 확인 버튼 생성 함수
+function createFollowingCheckButton() {
+  // 기존 버튼이 있다면 제거
+  const existingButton = document.getElementById('following-check-button');
+  if (existingButton) {
+    existingButton.remove();
+  }
+
+  // 버튼 생성
+  const button = document.createElement('button');
+  button.id = 'following-check-button';
+  button.textContent = '팔로잉확인';
+  button.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 100px;
+    padding: 10px 20px;
+    background-color: #0095f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 999999;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    transition: background-color 0.2s;
+  `;
+
+  // 마우스 오버 효과
+  button.onmouseover = () => {
+    button.style.backgroundColor = '#0081d6';
+  };
+  button.onmouseout = () => {
+    button.style.backgroundColor = '#0095f6';
+  };
+
+  // 클릭 이벤트
+  button.onclick = () => {
+    // 팔로잉 탭이 선택되어 있는지 확인
+    const tabList = document.querySelector('div[role="tablist"]');
+    if (tabList) {
+      const followingTab = tabList.querySelector('div[aria-label="팔로잉"]');
+      if (followingTab) {
+        const isSelected = followingTab.closest('div[role="tab"]').getAttribute('aria-selected') === 'true';
+        if (!isSelected) {
+          // 팔로잉 탭이 선택되어 있지 않으면 클릭
+          followingTab.click();
+          // 탭 전환 후 약간의 지연을 두고 실행
+          setTimeout(() => {
+            findFollowingUserId();
+          }, 1000);
+        } else {
+          // 이미 팔로잉 탭이 선택되어 있으면 바로 실행
+          findFollowingUserId();
+        }
+      } else {
+        showToast('팔로잉 탭을 찾을 수 없습니다.');
+      }
+    } else {
+      showToast('탭 리스트를 찾을 수 없습니다.');
+    }
+    showToast('팔로잉 목록을 확인합니다.');
+  };
+
+  document.body.appendChild(button);
+}
+
+// 페이지 로드 시 실행
+window.addEventListener('load', () => {
+  setupFollowingButtonObserver();
+  // 초기 실행도 시도
+  setupFollowingButtonListener();
+  // 팔로잉 확인 버튼 생성 제거
+  // createFollowingCheckButton();
+}); 
