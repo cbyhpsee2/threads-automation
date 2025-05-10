@@ -440,44 +440,334 @@ function displayPostLinks() {
         }
       }
     }
-    console.log('검색 페이지가 아니므로 링크 리스트를 표시하지 않습니다.');
+    // 검색 페이지가 아니면 아무것도 표시하지 않음
+    const existingContainer = document.getElementById('post-links-container');
+    if (existingContainer) {
+      existingContainer.remove();
+    }
     return;
   }
 
+  // 검색 페이지인 경우 여러 번 시도
+  let attempts = 0;
+  const maxAttempts = 5;
+  const attemptInterval = 1000; // 1초 간격
+
+  function tryDisplayLinks() {
+    attempts++;
+    console.log(`게시물 링크 목록 표시 시도 ${attempts}/${maxAttempts}`);
+
+    // 기존 리스트 컨테이너 제거
+    const existingContainer = document.getElementById('post-links-container');
+    if (existingContainer) {
+      existingContainer.remove();
+    }
+
+    // 모든 게시물 링크 찾기
+    postLinks = Array.from(document.querySelectorAll('a[href*="/post/"]'));
+    if (postLinks.length === 0) {
+      console.log('검색 결과에서 게시물 링크를 찾을 수 없습니다.');
+      if (attempts < maxAttempts) {
+        setTimeout(tryDisplayLinks, attemptInterval);
+      }
+      return;
+    }
+
+    // 팔로우한 사용자 목록 가져오기
+    const followedUsers = getFollowedUsers();
+
+    // 게시물 링크 저장 (중복 제거 및 이미 팔로우한 사용자 제외)
+    const uniquePosts = new Map();
+    postLinks.forEach(link => {
+      const href = link.getAttribute('href');
+      const match = href.match(/\/(@[\w.\-]+)/);
+      if (match) {
+        const userId = match[1].replace('@', '');
+        // 이미 팔로우한 사용자는 제외
+        if (!followedUsers.includes(userId) && !uniquePosts.has(userId)) {
+          uniquePosts.set(userId, {
+            href: href,
+            userId: userId
+          });
+        }
+      }
+    });
+    const posts = Array.from(uniquePosts.values());
+    localStorage.setItem('savedPosts', JSON.stringify(posts));
+
+    // 리스트 컨테이너 생성
+    const container = document.createElement('div');
+    container.id = 'post-links-container';
+    container.style.cssText = `
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      width: ${CONFIG.UI.LIST_WIDTH}px;
+      max-height: ${CONFIG.UI.LIST_MAX_HEIGHT};
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      z-index: 999999;
+      font-family: Arial, sans-serif;
+    `;
+
+    // 프로필 정보 표시
+    const profileContainer = createProfileInfo();
+    if (profileContainer) {
+      container.appendChild(profileContainer);
+    }
+
+    // 제목과 컨트롤 버튼 컨테이너
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    `;
+
+    // 검색창 컨테이너
+    const searchContainer = document.createElement('div');
+    searchContainer.style.cssText = `
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    `;
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = '검색어를 입력하세요';
+    
+    // URL의 검색어와 저장된 검색어 비교
+    const urlKeyword = getSearchKeywordFromUrl();
+    const savedKeyword = getSavedSearchKeyword();
+    
+    if (urlKeyword && urlKeyword !== savedKeyword) {
+      searchInput.value = urlKeyword;
+      saveSearchKeyword(urlKeyword);
+    } else {
+      searchInput.value = savedKeyword;
+    }
+
+    searchInput.style.cssText = `
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      width: 116px;
+    `;
+
+    const searchButton = document.createElement('button');
+    searchButton.textContent = '검색';
+    searchButton.style.cssText = `
+      padding: 8px 16px;
+      background-color: #0095f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    `;
+    searchButton.onmouseover = () => {
+      searchButton.style.backgroundColor = '#0081d6';
+    };
+    searchButton.onmouseout = () => {
+      searchButton.style.backgroundColor = '#0095f6';
+    };
+
+    // 검색 기능 구현
+    const performSearch = () => {
+      const searchTerm = searchInput.value.trim();
+      if (searchTerm) {
+        saveSearchKeyword(searchTerm);
+        const encodedSearchTerm = encodeURIComponent(searchTerm);
+        const searchUrl = `https://www.threads.com/search?q=${encodedSearchTerm}&serp_type=default`;
+        window.location.href = searchUrl;
+      }
+    };
+
+    searchButton.onclick = performSearch;
+    searchInput.onkeyup = (e) => {
+      if (e.key === 'Enter') {
+        performSearch();
+      }
+    };
+
+    searchContainer.appendChild(searchInput);
+    searchContainer.appendChild(searchButton);
+    headerContainer.appendChild(searchContainer);
+
+    // 제목과 컨트롤 버튼 컨테이너
+    const titleContainer = document.createElement('div');
+    titleContainer.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+    `;
+
+    const title = document.createElement('h3');
+    title.innerHTML = `게시물 링크 목록<br>(팔로우: ${followedUsers.length}명, 남은 게시물: ${posts.length}개)`;
+    title.style.cssText = `
+      margin: 0;
+      font-size: 16px;
+      color: #262626;
+    `;
+
+    const controlContainer = document.createElement('div');
+    controlContainer.style.cssText = `
+      display: flex;
+      gap: 8px;
+    `;
+
+    const startButton = document.createElement('button');
+    startButton.textContent = '시작';
+    startButton.style.cssText = `
+      padding: 6px 12px;
+      background-color: #0095f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    `;
+    startButton.onmouseover = () => {
+      startButton.style.backgroundColor = '#0081d6';
+    };
+    startButton.onmouseout = () => {
+      startButton.style.backgroundColor = '#0095f6';
+    };
+    startButton.onclick = () => {
+      isAutoNavigateEnabled = true;
+      currentIndex = 0;
+      if (posts.length > 0) {
+        window.location.href = posts[0].href;
+      } else {
+        alert('팔로우할 게시물이 없습니다.');
+      }
+    };
+
+    const stopButton = document.createElement('button');
+    stopButton.textContent = '중지';
+    stopButton.style.cssText = `
+      padding: 6px 12px;
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    `;
+    stopButton.onmouseover = () => {
+      stopButton.style.backgroundColor = '#c82333';
+    };
+    stopButton.onmouseout = () => {
+      stopButton.style.backgroundColor = '#dc3545';
+    };
+    stopButton.onclick = () => {
+      isAutoNavigateEnabled = false;
+    };
+
+    controlContainer.appendChild(startButton);
+    controlContainer.appendChild(stopButton);
+    titleContainer.appendChild(title);
+    titleContainer.appendChild(controlContainer);
+    headerContainer.appendChild(titleContainer);
+
+    // 링크 리스트 생성
+    const list = document.createElement('ul');
+    list.style.cssText = `
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    `;
+
+    posts.forEach((post, index) => {
+      const listItem = document.createElement('li');
+      listItem.style.cssText = `
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+      `;
+      listItem.onmouseover = () => {
+        listItem.style.backgroundColor = '#f8f9fa';
+      };
+      listItem.onmouseout = () => {
+        listItem.style.backgroundColor = 'white';
+      };
+
+      const linkText = document.createElement('span');
+      linkText.textContent = post.userId || `게시물 ${index + 1}`;
+      linkText.style.cssText = `
+        flex: 1;
+        margin-right: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: #262626;
+      `;
+
+      const moveButton = document.createElement('button');
+      moveButton.textContent = '이동';
+      moveButton.style.cssText = `
+        padding: 4px 8px;
+        background-color: #0095f6;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background-color 0.2s;
+      `;
+      moveButton.onmouseover = () => {
+        moveButton.style.backgroundColor = '#0081d6';
+      };
+      moveButton.onmouseout = () => {
+        moveButton.style.backgroundColor = '#0095f6';
+      };
+      moveButton.onclick = () => {
+        window.location.href = post.href;
+      };
+
+      listItem.appendChild(linkText);
+      listItem.appendChild(moveButton);
+      list.appendChild(listItem);
+    });
+
+    container.appendChild(headerContainer);
+    container.appendChild(list);
+    document.body.appendChild(container);
+  }
+
+  // 첫 시도 시작
+  tryDisplayLinks();
+}
+
+// 저장된 게시물 리스트 표시 함수
+function displaySavedPosts(posts) {
   // 기존 리스트 컨테이너 제거
   const existingContainer = document.getElementById('post-links-container');
   if (existingContainer) {
     existingContainer.remove();
   }
 
-  // 모든 게시물 링크 찾기
-  postLinks = Array.from(document.querySelectorAll('a[href*="/post/"]'));
-  if (postLinks.length === 0) {
-    console.log('검색 결과에서 게시물 링크를 찾을 수 없습니다.');
-    return;
-  }
-
   // 팔로우한 사용자 목록 가져오기
   const followedUsers = getFollowedUsers();
-
-  // 게시물 링크 저장 (중복 제거 및 이미 팔로우한 사용자 제외)
-  const uniquePosts = new Map();
-  postLinks.forEach(link => {
-    const href = link.getAttribute('href');
-    const match = href.match(/\/(@[\w.\-]+)/);
-    if (match) {
-      const userId = match[1].replace('@', '');
-      // 이미 팔로우한 사용자는 제외
-      if (!followedUsers.includes(userId) && !uniquePosts.has(userId)) {
-        uniquePosts.set(userId, {
-          href: href,
-          userId: userId
-        });
-      }
-    }
-  });
-  const posts = Array.from(uniquePosts.values());
-  localStorage.setItem('savedPosts', JSON.stringify(posts));
 
   // 리스트 컨테이너 생성
   const container = document.createElement('div');
@@ -593,12 +883,13 @@ function displayPostLinks() {
   const titleContainer = document.createElement('div');
   titleContainer.style.cssText = `
     display: flex;
+    flex-direction: column;
     justify-content: space-between;
     align-items: center;
   `;
 
   const title = document.createElement('h3');
-  title.textContent = `게시물 링크 목록 (팔로우: ${followedUsers.length}명, 남은 게시물: ${posts.length}개)`;
+  title.innerHTML = `게시물 링크 목록<br>(팔로우: ${followedUsers.length}명, 남은 게시물: ${posts.length}개)`;
   title.style.cssText = `
     margin: 0;
     font-size: 16px;
@@ -663,338 +954,8 @@ function displayPostLinks() {
     isAutoNavigateEnabled = false;
   };
 
-  const clearButton = document.createElement('button');
-  clearButton.textContent = '초기화';
-  clearButton.style.cssText = `
-    padding: 6px 12px;
-    background-color: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-    transition: background-color 0.2s;
-  `;
-  clearButton.onmouseover = () => {
-    clearButton.style.backgroundColor = '#5a6268';
-  };
-  clearButton.onmouseout = () => {
-    clearButton.style.backgroundColor = '#6c757d';
-  };
-  clearButton.onclick = () => {
-    localStorage.removeItem('followedUsers');
-    localStorage.removeItem('savedPosts');
-    location.reload();
-  };
-
   controlContainer.appendChild(startButton);
   controlContainer.appendChild(stopButton);
-  controlContainer.appendChild(clearButton);
-  titleContainer.appendChild(title);
-  titleContainer.appendChild(controlContainer);
-  headerContainer.appendChild(titleContainer);
-
-  // 링크 리스트 생성
-  const list = document.createElement('ul');
-  list.style.cssText = `
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  `;
-
-  posts.forEach((post, index) => {
-    const listItem = document.createElement('li');
-    listItem.style.cssText = `
-      padding: 8px;
-      border-bottom: 1px solid #eee;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: background-color 0.2s;
-    `;
-    listItem.onmouseover = () => {
-      listItem.style.backgroundColor = '#f8f9fa';
-    };
-    listItem.onmouseout = () => {
-      listItem.style.backgroundColor = 'white';
-    };
-
-    const linkText = document.createElement('span');
-    linkText.textContent = post.userId || `게시물 ${index + 1}`;
-    linkText.style.cssText = `
-      flex: 1;
-      margin-right: 10px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      color: #262626;
-    `;
-
-    const copyButton = document.createElement('button');
-    copyButton.textContent = '복사';
-    copyButton.style.cssText = `
-      padding: 4px 8px;
-      background-color: #0095f6;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: background-color 0.2s;
-    `;
-    copyButton.onmouseover = () => {
-      copyButton.style.backgroundColor = '#0081d6';
-    };
-    copyButton.onmouseout = () => {
-      copyButton.style.backgroundColor = '#0095f6';
-    };
-    copyButton.onclick = () => {
-      navigator.clipboard.writeText(post.href).then(() => {
-        copyButton.textContent = '복사됨!';
-        setTimeout(() => {
-          copyButton.textContent = '복사';
-        }, 1000);
-      });
-    };
-
-    listItem.appendChild(linkText);
-    listItem.appendChild(copyButton);
-    list.appendChild(listItem);
-  });
-
-  container.appendChild(headerContainer);
-  container.appendChild(list);
-  document.body.appendChild(container);
-}
-
-// 저장된 게시물 리스트 표시 함수
-function displaySavedPosts(posts) {
-  // 기존 리스트 컨테이너 제거
-  const existingContainer = document.getElementById('post-links-container');
-  if (existingContainer) {
-    existingContainer.remove();
-  }
-
-  // 팔로우한 사용자 목록 가져오기
-  const followedUsers = getFollowedUsers();
-
-  // 리스트 컨테이너 생성
-  const container = document.createElement('div');
-  container.id = 'post-links-container';
-  container.style.cssText = `
-    position: fixed;
-    top: 70px;
-    right: 20px;
-    width: ${CONFIG.UI.LIST_WIDTH}px;
-    max-height: ${CONFIG.UI.LIST_MAX_HEIGHT};
-    overflow-y: auto;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    z-index: 999999;
-    font-family: Arial, sans-serif;
-  `;
-
-  // 제목과 컨트롤 버튼 컨테이너
-  const headerContainer = document.createElement('div');
-  headerContainer.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eee;
-  `;
-
-  // 검색창 컨테이너
-  const searchContainer = document.createElement('div');
-  searchContainer.style.cssText = `
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  `;
-
-  // URL에서 검색어 가져오기
-  function getSearchKeywordFromUrl() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const keyword = urlParams.get('q');
-    return keyword ? decodeURIComponent(keyword) : null;
-  }
-
-  // 로컬 스토리지에서 검색 키워드 가져오기
-  function getSavedSearchKeyword() {
-    const profileLink = document.querySelector('a[href^="/@"]');
-    if (!profileLink) return CONFIG.SEARCH.KEYWORD;
-    
-    const userId = profileLink.getAttribute('href').replace('/@', '');
-    const savedKeyword = localStorage.getItem(`searchKeyword_${userId}`);
-    return savedKeyword || CONFIG.SEARCH.KEYWORD;
-  }
-
-  // 검색 키워드 저장
-  function saveSearchKeyword(keyword) {
-    const profileLink = document.querySelector('a[href^="/@"]');
-    if (!profileLink) return;
-    
-    const userId = profileLink.getAttribute('href').replace('/@', '');
-    localStorage.setItem(`searchKeyword_${userId}`, keyword);
-  }
-
-  const searchInput = document.createElement('input');
-  searchInput.type = 'text';
-  searchInput.placeholder = '검색어를 입력하세요';
-  
-  // URL의 검색어와 저장된 검색어 비교
-  const urlKeyword = getSearchKeywordFromUrl();
-  const savedKeyword = getSavedSearchKeyword();
-  
-  if (urlKeyword && urlKeyword !== savedKeyword) {
-    searchInput.value = urlKeyword;
-    saveSearchKeyword(urlKeyword);
-  } else {
-    searchInput.value = savedKeyword;
-  }
-
-  searchInput.style.cssText = `
-    flex: 1;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
-    width: 116px;
-  `;
-
-  const searchButton = document.createElement('button');
-  searchButton.textContent = '검색';
-  searchButton.style.cssText = `
-    padding: 8px 16px;
-    background-color: #0095f6;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: bold;
-    transition: background-color 0.2s;
-  `;
-  searchButton.onmouseover = () => {
-    searchButton.style.backgroundColor = '#0081d6';
-  };
-  searchButton.onmouseout = () => {
-    searchButton.style.backgroundColor = '#0095f6';
-  };
-
-  // 검색 기능 구현
-  const performSearch = () => {
-    const searchTerm = searchInput.value.trim();
-    if (searchTerm) {
-      saveSearchKeyword(searchTerm);
-      const encodedSearchTerm = encodeURIComponent(searchTerm);
-      const searchUrl = `https://www.threads.com/search?q=${encodedSearchTerm}&serp_type=default`;
-      window.location.href = searchUrl;
-    }
-  };
-
-  searchButton.onclick = performSearch;
-  searchInput.onkeyup = (e) => {
-    if (e.key === 'Enter') {
-      performSearch();
-    }
-  };
-
-  searchContainer.appendChild(searchInput);
-  searchContainer.appendChild(searchButton);
-  headerContainer.appendChild(searchContainer);
-
-  // 제목과 컨트롤 버튼 컨테이너
-  const titleContainer = document.createElement('div');
-  titleContainer.style.cssText = `
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  `;
-
-  const title = document.createElement('h3');
-  title.textContent = `저장된 게시물 목록 (팔로우: ${followedUsers.length}명)`;
-  title.style.cssText = `
-    margin: 0;
-    font-size: 16px;
-    color: #262626;
-  `;
-
-  const controlContainer = document.createElement('div');
-  controlContainer.style.cssText = `
-    display: flex;
-    gap: 8px;
-  `;
-
-  const nextButton = document.createElement('button');
-  nextButton.textContent = '다음';
-  nextButton.style.cssText = `
-    padding: 6px 12px;
-    background-color: #0095f6;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-    transition: background-color 0.2s;
-  `;
-  nextButton.onmouseover = () => {
-    nextButton.style.backgroundColor = '#0081d6';
-  };
-  nextButton.onmouseout = () => {
-    nextButton.style.backgroundColor = '#0095f6';
-  };
-  nextButton.onclick = () => {
-    // 다음 게시물로 이동
-    const currentUrl = window.location.pathname;
-    const currentIndex = posts.findIndex(post => post.href === currentUrl);
-    if (currentIndex < posts.length - 1) {
-      window.location.href = posts[currentIndex + 1].href;
-    } else {
-      // 모든 게시물을 팔로우했는지 확인
-      const allFollowed = posts.every(post => followedUsers.includes(post.userId));
-      if (allFollowed) {
-        // 검색 페이지로 이동
-        window.location.href = CONFIG.SEARCH.URL;
-      } else {
-        alert('아직 팔로우하지 않은 게시물이 있습니다.');
-      }
-    }
-  };
-
-  const clearButton = document.createElement('button');
-  clearButton.textContent = '초기화';
-  clearButton.style.cssText = `
-    padding: 6px 12px;
-    background-color: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-    transition: background-color 0.2s;
-  `;
-  clearButton.onmouseover = () => {
-    clearButton.style.backgroundColor = '#5a6268';
-  };
-  clearButton.onmouseout = () => {
-    clearButton.style.backgroundColor = '#6c757d';
-  };
-  clearButton.onclick = () => {
-    localStorage.removeItem('followedUsers');
-    localStorage.removeItem('savedPosts');
-    location.reload();
-  };
-
-  controlContainer.appendChild(nextButton);
-  controlContainer.appendChild(clearButton);
   titleContainer.appendChild(title);
   titleContainer.appendChild(controlContainer);
   headerContainer.appendChild(titleContainer);
@@ -1037,9 +998,9 @@ function displaySavedPosts(posts) {
       color: #262626;
     `;
 
-    const copyButton = document.createElement('button');
-    copyButton.textContent = '복사';
-    copyButton.style.cssText = `
+    const moveButton = document.createElement('button');
+    moveButton.textContent = '이동';
+    moveButton.style.cssText = `
       padding: 4px 8px;
       background-color: #0095f6;
       color: white;
@@ -1049,23 +1010,18 @@ function displaySavedPosts(posts) {
       font-size: 12px;
       transition: background-color 0.2s;
     `;
-    copyButton.onmouseover = () => {
-      copyButton.style.backgroundColor = '#0081d6';
+    moveButton.onmouseover = () => {
+      moveButton.style.backgroundColor = '#0081d6';
     };
-    copyButton.onmouseout = () => {
-      copyButton.style.backgroundColor = '#0095f6';
+    moveButton.onmouseout = () => {
+      moveButton.style.backgroundColor = '#0095f6';
     };
-    copyButton.onclick = () => {
-      navigator.clipboard.writeText(post.href).then(() => {
-        copyButton.textContent = '복사됨!';
-        setTimeout(() => {
-          copyButton.textContent = '복사';
-        }, 1000);
-      });
+    moveButton.onclick = () => {
+      window.location.href = post.href;
     };
 
     listItem.appendChild(linkText);
-    listItem.appendChild(copyButton);
+    listItem.appendChild(moveButton);
     list.appendChild(listItem);
   });
 
@@ -1104,34 +1060,65 @@ function navigateToNextPost() {
 
 // 페이지 소유자와 게시글 작성자가 동일할 때만 팔로우 자동 실행
 function autoFollowIfOwnerIsAuthor() {
-  // 1. 현재 페이지 주소에서 아이디 추출
-  const match = window.location.pathname.match(/^\/(@[\w.\-]+)\/post\//);
-  if (!match) return;
-  const pageOwnerId = match[1].replace('@', '');
+  console.log('팔로우 자동 실행 시작');
+  
+  // URL에서 like=ok 파라미터 확인
+  const urlParams = new URLSearchParams(window.location.search);
+  const isLikeOk = urlParams.get('like') === 'ok';
+  console.log('like=ok 파라미터 확인:', isLikeOk);
+  
+  if (!isLikeOk) {
+    console.log('like=ok 파라미터가 없어 팔로우를 실행하지 않습니다.');
+    return;
+  }
 
-  // 2. 게시글 작성자 아이디 추출
+  // 사용자 홈페이지 URL 패턴 확인
+  const match = window.location.pathname.match(/^\/(@[\w.\-]+)$/);
+  console.log('페이지 주소 확인:', window.location.pathname, match);
+  
+  if (!match) {
+    console.log('사용자 홈페이지가 아닙니다.');
+    return;
+  }
+  
+  const pageOwnerId = match[1].replace('@', '');
+  console.log('페이지 주소에서 아이디 추출:', pageOwnerId);
+  
+  // 게시글 작성자 아이디 추출
   const userLink = document.querySelector('.x1a2a7pz.x1n2onr6 a[href^="/@"]');
-  if (!userLink) return;
+  if (!userLink) {
+    console.log('사용자 링크를 찾을 수 없습니다.');
+    return;
+  }
+  
   const authorHref = userLink.getAttribute('href');
   const authorId = authorHref.replace('/@', '');
+  console.log('게시글 작성자 아이디:', authorId);
 
-  // 3. 동일할 때만 팔로우
+  // 동일할 때만 팔로우
   if (pageOwnerId === authorId) {
-    autoHoverAndFollowUser(authorId);
+    console.log('페이지 주소와 게시글 작성자 아이디가 동일합니다.');
+    handleFollowButton(); // autoHoverAndFollowUser 대신 handleFollowButton 사용
+  } else {
+    console.log('페이지 주소와 게시글 작성자 아이디가 다릅니다.');
   }
 }
 
 // 페이지 로딩 완료 시 실행
 function initializeExtension() {
   if (document.readyState === 'complete') {
+    console.log('페이지 로딩 완료1');
     displayPostLinks();
-    autoFollowIfOwnerIsAuthor();
+    setTimeout(() => {
+      autoFollowIfOwnerIsAuthor();
+    }, 2000);
     // 포스트 페이지에서만 자동 클릭 실행
     if (window.location.pathname.includes('/post/')) {
       autoClickLikeAndRepostWithNotify();
     }
   } else {
     window.addEventListener('load', () => {
+      console.log('페이지 로딩 완료2');
       setTimeout(() => {
         displayPostLinks();
         // 포스트 페이지에서만 자동 클릭 실행
@@ -1139,7 +1126,7 @@ function initializeExtension() {
           autoClickLikeAndRepostWithNotify();
         }
         autoFollowIfOwnerIsAuthor();
-      }, 1000);
+      }, 2000);
     });
   }
 }
@@ -1162,440 +1149,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// 특정 게시자 아이디에 마우스 오버 효과 및 팔로우 버튼 자동 클릭
-function autoHoverAndFollowUser(userId) {
-  // 1. 타겟 a 요소 찾기
-  const parent = document.querySelector('.x1a2a7pz.x1n2onr6');
-  if (parent) {
-    const userLink = parent.querySelector(`a[href="/@${userId}"]`);
-    if (userLink) {
-      // 여러 마우스 이벤트 강제 발생
-      ['mouseover', 'mouseenter', 'mousemove'].forEach(type => {
-        const event = new MouseEvent(type, { bubbles: true, cancelable: true, view: window });
-        userLink.dispatchEvent(event);
-      });
-      // 1초 후 팔로우 버튼 클릭 시도
-      setTimeout(() => {
-        const followBtn = Array.from(document.querySelectorAll('div[role="button"]'))
-          .find(btn => btn.innerText.trim() === '팔로우');
-        if (followBtn) {
-          followBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          followBtn.click();
-          console.log('팔로우 버튼 자동 클릭 완료');
-        } else {
-          console.log('팔로우 버튼을 찾지 못했습니다.');
-        }
-      }, 1000);
-    }
-  }
-}
-
-// 사용 예시: itemfinder.co.kr 계정에 대해 자동 팔로우
-// autoHoverAndFollowUser('itemfinder.co.kr');
-
-// 답글 입력창에 '스하리~' 입력
-// setTimeout(() => {
-//   const replyInput = document.querySelector('div[role="textbox"][data-lexical-editor="true"]');
-//   if (replyInput) {
-//     // Lexical 에디터의 editorState에 접근
-//     const editor = replyInput.__lexicalEditor;
-//     if (editor) {
-//       // 에디터 상태 업데이트
-//       editor.update(() => {
-//         const root = editor.getRootElement();
-//         const paragraph = document.createElement('p');
-//         paragraph.className = 'xdj266r x11i5rnm xat24cr x1mh8g0r';
-//         paragraph.dir = 'ltr';
-        
-//         const span = document.createElement('span');
-//         span.setAttribute('data-lexical-text', 'true');
-//         span.textContent = '스하리~^^';
-        
-//         paragraph.appendChild(span);
-//         root.appendChild(paragraph);
-//       });
-
-//       console.log('Lexical 에디터에 텍스트 입력 완료');
-//     } else {
-//       console.log('Lexical 에디터를 찾지 못했습니다.');
-//     }
-//   } else {
-//     console.log('답글 입력창을 찾지 못했습니다.');
-//   }
-// }, 500); // 답글 입력창이 나타날 때까지 0.5초 대기
-
-// 리포스트 처리 중인지 확인하는 플래그
-let isReposting = false;
-let lastRepostTimes = new Map(); // 게시물별 마지막 리포스트 시간 저장
-const REPOST_COOLDOWN = CONFIG.REPOST_COOLDOWN; // config에서 쿨다운 시간 가져오기
-
-// 리포스트 처리 함수
-function handleRepost() {
-  // 포스트 페이지인지 확인
-  if (!window.location.pathname.includes('/post/')) return;
-  // 자동 동작이 중지되었는지 확인
-  if (window.stopAutoActions) return;
-  
-  // 현재 게시물 ID 추출
-  const match = window.location.pathname.match(/^\/(@[\w.\-]+)\/post\/(\d+)/);
-  if (!match) {
-    console.log('게시물 ID를 찾을 수 없습니다.');
-    return;
-  }
-  const postId = match[2];
-  
-  const currentTime = Date.now();
-  // 현재 게시물에 대한 쿨다운 확인
-  const lastRepostTime = lastRepostTimes.get(postId) || 0;
-  if (isReposting || (currentTime - lastRepostTime < REPOST_COOLDOWN)) {
-    console.log('리포스트 처리 중이거나 현재 게시물의 쿨다운 시간이 지나지 않았습니다.');
-    return;
-  }
-
-  console.log('리포스트 처리 시작');
-  isReposting = true;
-  lastRepostTimes.set(postId, currentTime);
-  
-  // 3초 후 리포스트 버튼 찾기
-  setTimeout(() => {
-    // 자동 동작이 중지되었는지 확인
-    if (window.stopAutoActions) {
-      isReposting = false;
-      return;
-    }
-
-    // 칼럼 본문 찾기
-    const columnContent = document.querySelector('[aria-label="칼럼 본문"]');
-    if (!columnContent) {
-      console.log('칼럼 본문을 찾지 못했습니다.');
-      isReposting = false;
-      return;
-    }
-
-    // 이미 리포스트된 게시물인지 확인
-    const repostedSvg = columnContent.querySelector('svg[aria-label="리포스트 취소"]');
-    if (repostedSvg) {
-      console.log('이미 리포스트된 게시물입니다.');
-      isReposting = false;
-      return;
-    }
-
-    // 첫 번째 리포스트 버튼 찾기 (특정 클래스 구조 사용)
-    const repostBtn = columnContent.querySelector('div.x1i10hfl.x1qjc9v5.xjbqb8w.xjqpnuy.xa49m3k.xqeqjp1.x2hbi6w.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.x1ypdohk.xdl72j9.x2lah0s.xe8uvvx.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.x2lwn1j.xeuugli.xexx8yu.x4uap5.x18d9i69.xkhd6sd.x1n2onr6.x16tdsg8.x1hl2dhg.xggy1nq.x1ja2u2z.x1t137rt.x1o1ewxj.x3x9cwd.x1e5q0jg.x13rtm0m.x3nfvp2.x1q0g3np.x87ps6o.x1lku1pv.x1a2a7pz[role="button"] svg[aria-label="리포스트"]')?.closest('div[role="button"]');
-
-    if (repostBtn) {
-      console.log('리포스트 버튼 찾음');
-      
-      // 자동 동작이 중지되었는지 확인
-      if (window.stopAutoActions) {
-        isReposting = false;
-        return;
-      }
-      
-      // 버튼의 위치 정보 저장
-      const buttonRect = repostBtn.getBoundingClientRect();
-      
-      // 버튼이 보이도록 스크롤
-      repostBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      
-      // 1초 대기 후 버튼 클릭
-      setTimeout(() => {
-        if (window.stopAutoActions) {
-          isReposting = false;
-          return;
-        }
-        repostBtn.click();
-        console.log('리포스트 버튼 클릭 완료');
-
-        // 3초 후 팝업의 리포스트 버튼 찾기
-        setTimeout(() => {
-          // 자동 동작이 중지되었는지 확인
-          if (window.stopAutoActions) {
-            isReposting = false;
-            return;
-          }
-
-          // 모든 팝업 버튼 찾기
-          const popupButtons = document.querySelectorAll('div[role="button"]');
-          console.log('팝업 버튼 수:', popupButtons.length);
-
-          // 가장 가까운 리포스트 팝업 버튼 찾기
-          let closestButton = null;
-          let minDistance = Infinity;
-
-          popupButtons.forEach(btn => {
-            const text = btn.textContent.trim();
-            if (text === '리포스트' || text === 'Repost') {
-              const btnRect = btn.getBoundingClientRect();
-              // 버튼과 팝업 버튼 사이의 거리 계산
-              const distance = Math.sqrt(
-                Math.pow(btnRect.left - buttonRect.left, 2) +
-                Math.pow(btnRect.top - buttonRect.top, 2)
-              );
-              
-              if (distance < minDistance) {
-                minDistance = distance;
-                closestButton = btn;
-              }
-            }
-          });
-
-          if (closestButton) {
-            console.log('가장 가까운 리포스트 팝업 버튼 찾음');
-            // 자동 동작이 중지되었는지 확인
-            if (window.stopAutoActions) {
-              isReposting = false;
-              return;
-            }
-            
-            // 버튼이 보이도록 스크롤
-            closestButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // 1초 대기 후 버튼 클릭
-            setTimeout(() => {
-              if (window.stopAutoActions) {
-                isReposting = false;
-                return;
-              }
-              closestButton.click();
-              console.log('리포스트 팝업 버튼 클릭 완료');
-
-              // 3초 후 사용자 홈으로 이동
-              setTimeout(() => {
-                // 자동 동작이 중지되었는지 확인
-                if (window.stopAutoActions) {
-                  isReposting = false;
-                  return;
-                }
-                
-                const match = window.location.pathname.match(/^\/(@[\w.\-]+)\/post\//);
-                if (match) {
-                  const pageOwnerId = match[1].replace('@', '');
-                  // 사용자 상호작용 시뮬레이션 후 페이지 이동
-                  simulateUserInteraction();
-                  setTimeout(() => {
-                    if (!window.stopAutoActions) {
-                      isReposting = false; // 리포스트 처리 완료
-                      window.location.href = 'https://www.threads.com/@'+pageOwnerId+'?like=ok';
-                    }
-                  }, 1000);
-                }
-              }, 3000);
-            }, 1000);
-          } else {
-            console.log('리포스트 팝업 버튼을 찾지 못했습니다.');
-            isReposting = false;
-          }
-        }, 3000);
-      }, 1000);
-    } else {
-      console.log('리포스트 버튼을 찾지 못했습니다.');
-      isReposting = false;
-    }
-  }, 3000);
-}
-
-// 페이지 변경 감지를 위한 MutationObserver 설정
-let pageObserver = null;
-
-function setupPageObserver() {
-  if (pageObserver) {
-    pageObserver.disconnect();
-  }
-
-  pageObserver = new MutationObserver((mutations, obs) => {
-    // URL이 변경되었는지 확인
-    const currentUrl = window.location.href;
-    if (currentUrl !== lastUrl) {
-      lastUrl = currentUrl;
-      console.log('페이지 변경 감지:', currentUrl);
-      
-      // 이전 페이지의 스크롤 이벤트 리스너 제거
-      window.removeEventListener('scroll', handleScroll);
-      
-      handlePageChange(currentUrl);
-    }
-  });
-
-  // body 요소의 변경 감시
-  pageObserver.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
-}
-
-// 중지 버튼 표시 함수
-function showStopButton() {
-  // 기존 중지 버튼 제거
-  const existingButton = document.getElementById('stop-button');
-  if (existingButton) {
-    existingButton.remove();
-  }
-
-  // 중지 버튼 생성
-  const stopButton = document.createElement('button');
-  stopButton.id = 'stop-button';
-  stopButton.textContent = '중지';
-  stopButton.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 10px 20px;
-    background-color: #dc3545;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: bold;
-    z-index: 999999;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    transition: background-color 0.2s;
-  `;
-
-  // 마우스 오버 효과
-  stopButton.onmouseover = () => {
-    stopButton.style.backgroundColor = '#c82333';
-  };
-  stopButton.onmouseout = () => {
-    stopButton.style.backgroundColor = '#dc3545';
-  };
-
-  // 클릭 이벤트
-  stopButton.onclick = () => {
-    isAutoNavigateEnabled = false;
-    // 모든 자동 동작 중지
-    window.stopAutoActions = true;
-    showToast('자동 실행이 중지되었습니다.');
-    stopButton.remove();
-    // 시작 버튼 표시
-    showStartButton();
-  };
-
-  document.body.appendChild(stopButton);
-}
-
-// 시작 버튼 표시 함수 추가
-function showStartButton() {
-  // 기존 시작 버튼 제거
-  const existingButton = document.getElementById('start-button');
-  if (existingButton) {
-    existingButton.remove();
-  }
-
-  // 시작 버튼 생성
-  const startButton = document.createElement('button');
-  startButton.id = 'start-button';
-  startButton.textContent = '시작';
-  startButton.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 10px 20px;
-    background-color: #28a745;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: bold;
-    z-index: 999999;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    transition: background-color 0.2s;
-  `;
-
-  // 마우스 오버 효과
-  startButton.onmouseover = () => {
-    startButton.style.backgroundColor = '#218838';
-  };
-  startButton.onmouseout = () => {
-    startButton.style.backgroundColor = '#28a745';
-  };
-
-  // 클릭 이벤트
-  startButton.onclick = () => {
-    // 자동 동작 재개
-    window.stopAutoActions = false;
-    showToast('자동 실행이 시작되었습니다.');
-    startButton.remove();
-    // 중지 버튼 표시
-    showStopButton();
-    // 현재 페이지에 맞는 동작 재시작
-    handlePageChange(window.location.href);
-  };
-
-  document.body.appendChild(startButton);
-}
-
-// 페이지 변경 처리 함수 수정
-function handlePageChange(url) {
-  // 자동 동작이 중지되었는지 확인
-  if (window.stopAutoActions) return;
-
-  // 페이지 로드 완료 대기
-  setTimeout(() => {
-    // 자동 동작이 중지되었는지 확인
-    if (window.stopAutoActions) return;
-
-    // 메인 페이지, 활동 페이지, 사용자 홈페이지에서는 시작/중지 버튼을 표시하지 않음
-    if (url === 'https://www.threads.com/' || 
-        url === 'https://www.threads.com/activity' ||
-        url.match(/^https:\/\/www\.threads\.com\/@[\w.\-]+$/)) {
-      // 검색창 표시를 위한 observer 설정
-      let searchObserver = new MutationObserver((mutations, obs) => {
-        const existingContainer = document.getElementById('post-links-container');
-        if (!existingContainer) {
-          displaySearchBarOnly();
-        }
-      });
-      searchObserver.observe(document.body, { childList: true, subtree: true });
-      return;
-    }
-
-    // 중지 버튼 표시를 위한 observer 설정
-    let stopButtonObserver = new MutationObserver((mutations, obs) => {
-      const existingStopButton = document.getElementById('stop-button');
-      const existingStartButton = document.getElementById('start-button');
-      if (!existingStopButton && !existingStartButton && !window.stopAutoActions) {
-        showStopButton();
-      }
-    });
-    stopButtonObserver.observe(document.body, { childList: true, subtree: true });
-
-    if (url.includes('/post/')) {
-      // 포스트 페이지인 경우
-      setTimeout(() => {
-        if (!window.stopAutoActions) {
-          handleRepost();
-        }
-      }, 2000);
-    } else if (url.includes('threads.com/@')) {
-      // 사용자 홈페이지인 경우
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('like') === 'ok') {
-        setTimeout(() => {
-          if (!window.stopAutoActions) {
-            handleFollowButton();
-          }
-        }, 2000);
-      }
-    } else if (url.includes('threads.com/search')) {
-      // 검색 페이지인 경우
-      console.log('검색 페이지 감지됨');
-      
-      // 스크롤 이벤트 리스너 추가
-      window.addEventListener('scroll', handleScroll);
-      
-      // 초기 리스트 표시
-      setTimeout(() => {
-        if (!window.stopAutoActions) {
-          displayPostLinks();
-        }
-      }, 3000);
-    }
-  }, 2000);
-}
-
 // 팔로우 버튼 처리 함수
 function handleFollowButton() {
   setTimeout(() => {
@@ -1606,6 +1159,7 @@ function handleFollowButton() {
       return;
     }
     const userId = match[1].replace('@', '');
+    console.log('현재 사용자 ID:', userId);
     
     // 이미 팔로우한 사용자인지 확인
     const followedUsers = getFollowedUsers();
@@ -1642,45 +1196,22 @@ function handleFollowButton() {
       return;
     }
 
-    // 팔로우 버튼 찾기 (여러 선택자 시도)
-    const followBtn = document.querySelector('div[role="button"] div.x6ikm8r.x10wlt62.xlyipyv') ||
-                    document.querySelector('div[role="button"] div.x1i10hfl.xjbqb8w.x1ypdohk') ||
-                    Array.from(document.querySelectorAll('div[role="button"]')).find(btn => {
-                      // 버튼의 모든 div 요소 확인
-                      const divs = btn.querySelectorAll('div');
-                      for (const div of divs) {
-                        const text = div.textContent.trim();
-                        console.log('버튼 내부 div 텍스트:', text);
-                        // 팔로잉인 경우 건너뛰기
-                        if (text === '팔로잉' || text === 'Following') {
-                          console.log('이미 팔로우 중인 사용자입니다.');
-                          return false;
-                        }
-                        // 팔로우 버튼 찾기
-                        if (text === '팔로우' || text === 'Follow') {
-                          return true;
-                        }
-                      }
-                      return false;
-                    });
+    console.log('팔로우 버튼 찾기 시작...');
+    
+    // role="button"이고 텍스트가 '팔로우'인 첫 번째 버튼 찾기
+    const followBtn = Array.from(document.querySelectorAll('div[role="button"]')).find(btn => {
+      const text = btn.textContent.trim();
+      return text === '팔로우' || text === 'Follow';
+    });
 
     if (followBtn) {
       console.log('팔로우 버튼 찾음:', followBtn);
+      
       // 버튼이 보이도록 스크롤
       followBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // 클릭 전 잠시 대기
       setTimeout(() => {
-        // 마우스 이벤트 시뮬레이션
-        ['mouseover', 'mouseenter', 'mousemove'].forEach(type => {
-          const event = new MouseEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          });
-          followBtn.dispatchEvent(event);
-        });
-
         // 클릭 이벤트 발생
         followBtn.click();
         console.log('팔로우 버튼 클릭 완료');
@@ -1721,25 +1252,20 @@ function handleFollowButton() {
     } else {
       console.log('팔로우 버튼을 찾지 못했습니다.');
       // 디버깅을 위해 모든 버튼 출력
-      const allButtons = document.querySelectorAll('div[role="button"]');
-      allButtons.forEach(btn => {
-        const divs = btn.querySelectorAll('div');
-        divs.forEach(div => {
-          console.log('버튼 내부 div 텍스트:', div.textContent.trim());
+      /*const allButtons = document.querySelectorAll('div[role="button"]');
+      console.log('=== 모든 버튼 정보 ===');
+      allButtons.forEach((btn, index) => {
+        console.log(`버튼 ${index + 1}:`, {
+          text: btn.textContent.trim(),
+          html: btn.outerHTML
         });
-      });
+      });*/
     }
   }, 2000);
 }
 
 // 마지막 URL 저장 변수
 let lastUrl = window.location.href;
-
-// 페이지 로드 시 observer 설정 및 초기 페이지 처리
-window.addEventListener('load', () => {
-  setupPageObserver();
-  handlePageChange(window.location.href);
-});
 
 // URL 변경 감지를 위한 history API 오버라이드
 const originalPushState = history.pushState;
@@ -1791,9 +1317,15 @@ function handleScroll() {
   const scrollTop = window.scrollY || document.documentElement.scrollTop;
   const clientHeight = document.documentElement.clientHeight;
 
-  // 스크롤이 하단에서 100px 이내에 도달하면 리스트 갱신
-  if (scrollHeight - scrollTop - clientHeight < 100) {
+  // 스크롤이 하단에서 200px 이내에 도달하면 리스트 갱신
+  if (scrollHeight - scrollTop - clientHeight < 200) {
     console.log('스크롤 하단 감지, 리스트 갱신 시작');
+    // 기존 리스트 제거
+    const existingContainer = document.getElementById('post-links-container');
+    if (existingContainer) {
+      existingContainer.remove();
+    }
+    // 새로운 리스트 표시
     displayPostLinks();
   }
 }
@@ -1998,7 +1530,7 @@ function createProfileInfo() {
     const keywordDiv = document.createElement('div');
     keywordDiv.style.marginBottom = '16px';
     keywordDiv.innerHTML = `<b>검색 키워드:</b> <span style='color:#0095f6'>${searchKeyword || '없음'}</span>`;
-    modal.appendChild(keywordDiv);
+    //modal.appendChild(keywordDiv);
 
     // 팔로워 리스트 섹션
     const followerSection = document.createElement('div');
@@ -2008,6 +1540,7 @@ function createProfileInfo() {
     const followerHeader = document.createElement('div');
     followerHeader.style.cssText = `
       display: flex;
+      flex-direction: column;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
@@ -2016,6 +1549,14 @@ function createProfileInfo() {
     const followerTitle = document.createElement('div');
     followerTitle.innerHTML = `<b>팔로워 목록 (${followedUsers.length}명)</b>`;
     followerHeader.appendChild(followerTitle);
+
+    // 버튼 컨테이너
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    `;
 
     // 팔로잉 확인 버튼
     const checkFollowingBtn = document.createElement('button');
@@ -2045,7 +1586,46 @@ function createProfileInfo() {
         infoBtn.click();
       }, 1000);
     };
-    followerHeader.appendChild(checkFollowingBtn);
+
+    // 초기화 버튼
+    const clearButton = document.createElement('button');
+    clearButton.textContent = '초기화';
+    clearButton.style.cssText = `
+      padding: 4px 12px;
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    `;
+    clearButton.onmouseover = () => {
+      clearButton.style.backgroundColor = '#c82333';
+    };
+    clearButton.onmouseout = () => {
+      clearButton.style.backgroundColor = '#dc3545';
+    };
+    clearButton.onclick = () => {
+      if (confirm('정말로 모든 팔로워 목록과 저장된 게시물을 초기화하시겠습니까?')) {
+        // 팔로워 목록 초기화
+        const profileLink = document.querySelector('a[href^="/@"]');
+        if (profileLink) {
+          const userId = profileLink.getAttribute('href').replace('/@', '');
+          localStorage.removeItem(`followedUsers_${userId}`);
+        }
+        // 저장된 게시물 초기화
+        localStorage.removeItem('savedPosts');
+        showToast('모든 데이터가 초기화되었습니다.');
+        // 페이지 새로고침
+        location.reload();
+      }
+    };
+
+    buttonContainer.appendChild(checkFollowingBtn);
+    buttonContainer.appendChild(clearButton);
+    followerHeader.appendChild(buttonContainer);
     followerSection.appendChild(followerHeader);
 
     const followerList = document.createElement('ul');
@@ -2286,6 +1866,50 @@ window.addEventListener('load', () => {
   setupFollowingButtonObserver();
   // 초기 실행도 시도
   setupFollowingButtonListener();
-  // 팔로잉 확인 버튼 생성 제거
-  // createFollowingCheckButton();
-}); 
+});
+
+// 팔로워 상태 확인 함수
+async function checkFollowerStatus(userId) {
+  try {
+    // 팔로워의 프로필 페이지 URL
+    const profileUrl = `https://www.threads.com/@${userId}`;
+    
+    // 팔로워의 프로필 페이지에서 상태 확인
+    const response = await fetch(profileUrl);
+    const text = await response.text();
+    
+    // 상태 확인
+    const isActive = !text.includes('계정이 비활성화되었습니다');
+    const isFollowing = text.includes('팔로잉');
+    
+    return {
+      isActive,
+      isFollowing,
+      lastActive: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('팔로워 상태 확인 중 오류:', error);
+    return {
+      isActive: false,
+      isFollowing: false,
+      lastActive: null
+    };
+  }
+}
+
+// 팔로워 정보 저장 함수
+function saveFollowerInfo(userId, status) {
+  const profileLink = document.querySelector('a[href^="/@"]');
+  if (!profileLink) return;
+  
+  const currentUserId = profileLink.getAttribute('href').replace('/@', '');
+  const followerInfo = JSON.parse(localStorage.getItem(`followerInfo_${currentUserId}`) || '{}');
+  
+  followerInfo[userId] = {
+    ...followerInfo[userId],
+    ...status,
+    lastChecked: new Date().toISOString()
+  };
+  
+  localStorage.setItem(`followerInfo_${currentUserId}`, JSON.stringify(followerInfo));
+} 
