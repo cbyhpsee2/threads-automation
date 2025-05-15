@@ -83,6 +83,10 @@ function findRepostButton(extraClass = "") {
 
 // 포스트 페이지에서 좋아요, 리포스트, 두번째 리포스트 버튼 자동 클릭 및 알림
 function autoClickLikeAndRepostWithNotify() {
+  if (getAutoActionState() !== 'start') {
+    console.log('자동 실행 상태가 중지이므로 동작하지 않음');
+    return;
+  }
   // 포스트 페이지인지 확인 (URL에 /post/ 포함)
   if (!window.location.pathname.includes('/post/')) return;
 
@@ -417,6 +421,15 @@ function addFollowedUser(userId) {
 function displayPostLinks() {
   // 현재 URL이 검색 페이지인지 확인
   if (!window.location.href.includes('threads.com/search')) {
+    // 저장된 게시물 리스트가 있으면 항상 게시물 목록 리스트를 띄움
+    const savedPosts = localStorage.getItem('savedPosts');
+    if (savedPosts) {
+      const posts = JSON.parse(savedPosts);
+      if (posts.length > 0) {
+        displaySavedPosts(posts);
+        return;
+      }
+    }
     // 메인 페이지, 활동 페이지, 사용자 홈페이지인 경우 검색창만 표시
     if (window.location.href === 'https://www.threads.com/' || 
         window.location.href === 'https://www.threads.com/activity' ||
@@ -424,20 +437,12 @@ function displayPostLinks() {
       displaySearchBarOnly();
       return;
     }
-    
     // 사용자 홈페이지인 경우
     if (window.location.href.includes('threads.com/@')) {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('like') === 'ok') {
-        // 저장된 게시물 리스트 가져오기
-        const savedPosts = localStorage.getItem('savedPosts');
-        if (savedPosts) {
-          const posts = JSON.parse(savedPosts);
-          if (posts.length > 0) {
-            displaySavedPosts(posts);
-            return;
-          }
-        }
+        // 이미 위에서 처리됨
+        return;
       }
     }
     // 검색 페이지가 아니면 아무것도 표시하지 않음
@@ -648,6 +653,8 @@ function displayPostLinks() {
       startButton.style.backgroundColor = '#0095f6';
     };
     startButton.onclick = () => {
+      setAutoActionState('start');
+      showAutoActionStateBox();
       isAutoNavigateEnabled = true;
       currentIndex = 0;
       if (posts.length > 0) {
@@ -678,6 +685,9 @@ function displayPostLinks() {
     };
     stopButton.onclick = () => {
       isAutoNavigateEnabled = false;
+      setAutoActionState('stop');
+      showAutoActionStateBox();
+      console.log('중지 버튼 클릭됨, 상태: stop');
     };
 
     controlContainer.appendChild(startButton);
@@ -752,6 +762,7 @@ function displayPostLinks() {
     container.appendChild(headerContainer);
     container.appendChild(list);
     document.body.appendChild(container);
+    showAutoActionStateBox();
   }
 
   // 첫 시도 시작
@@ -922,6 +933,8 @@ function displaySavedPosts(posts) {
     startButton.style.backgroundColor = '#0095f6';
   };
   startButton.onclick = () => {
+    setAutoActionState('start');
+    showAutoActionStateBox();
     isAutoNavigateEnabled = true;
     currentIndex = 0;
     if (posts.length > 0) {
@@ -952,6 +965,9 @@ function displaySavedPosts(posts) {
   };
   stopButton.onclick = () => {
     isAutoNavigateEnabled = false;
+    setAutoActionState('stop');
+    showAutoActionStateBox();
+    console.log('중지 버튼 클릭됨, 상태: stop');
   };
 
   controlContainer.appendChild(startButton);
@@ -1028,6 +1044,7 @@ function displaySavedPosts(posts) {
   container.appendChild(headerContainer);
   container.appendChild(list);
   document.body.appendChild(container);
+  showAutoActionStateBox();
 }
 
 // 랜덤 지연 시간 생성 함수
@@ -1037,7 +1054,7 @@ function getRandomDelay(min, max) {
 
 // 다음 게시물로 이동하는 함수
 function navigateToNextPost() {
-  if (!isAutoNavigateEnabled || currentIndex >= postLinks.length) {
+  if (getAutoActionState() !== 'start' || !isAutoNavigateEnabled || currentIndex >= postLinks.length) {
     isAutoNavigateEnabled = false;
     return;
   }
@@ -1046,12 +1063,11 @@ function navigateToNextPost() {
   const href = link.getAttribute('href');
   if (href) {
     console.log(`게시물 ${currentIndex + 1}로 이동:`, href);
-    // 사용자 상호작용 시뮬레이션 후 페이지 이동
     simulateUserInteraction();
-    // 3~5초 사이의 랜덤한 지연 시간 적용
     const delay = getRandomDelay(3000, 5000);
     console.log(`${delay/1000}초 후 이동 예정`);
     setTimeout(() => {
+      if (getAutoActionState() !== 'start') return;
       window.location.href = href;
     }, delay);
   }
@@ -1912,4 +1928,101 @@ function saveFollowerInfo(userId, status) {
   };
   
   localStorage.setItem(`followerInfo_${currentUserId}`, JSON.stringify(followerInfo));
-} 
+}
+
+// 상태 저장/조회 함수
+function setAutoActionState(state) {
+  localStorage.setItem('autoActionState', state); // 'start' 또는 'stop'
+}
+function getAutoActionState() {
+  return localStorage.getItem('autoActionState') || 'stop';
+}
+
+// 상태 표시 박스 함수
+function showAutoActionStateBox() {
+  let box = document.getElementById('auto-action-state-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'auto-action-state-box';
+    box.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      padding: 8px 18px;
+      background: #222;
+      color: #fff;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: bold;
+      z-index: 1000001;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      opacity: 0.92;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    `;
+    document.body.appendChild(box);
+  }
+  box.innerHTML = '';
+
+  const state = getAutoActionState();
+  const text = document.createElement('span');
+  text.textContent = state === 'start' ? '자동 실행 중' : '자동 중지';
+  box.appendChild(text);
+
+  const btn = document.createElement('button');
+  btn.textContent = state === 'start' ? '중지' : '시작';
+  btn.style.cssText = `
+    margin-left: 10px;
+    padding: 4px 14px;
+    background-color: ${state === 'start' ? '#dc3545' : '#28a745'};
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+  `;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    if (state === 'start') {
+      setAutoActionState('stop');
+      isAutoNavigateEnabled = false;
+      // 자동 동작 루프 중지(필요시)
+    } else {
+      setAutoActionState('start');
+      isAutoNavigateEnabled = true;
+      // 자동 동작 루프 시작(필요시)
+      if (window.location.href.includes('threads.com/search')) {
+        const savedPosts = localStorage.getItem('savedPosts');
+        if (savedPosts) {
+          const posts = JSON.parse(savedPosts);
+          if (posts.length > 0) {
+            window.location.href = posts[0].href;
+          }
+        }
+      }
+    }
+    showAutoActionStateBox();
+    console.log(`${btn.textContent} 버튼 클릭됨, 상태: ${getAutoActionState()}`);
+  };
+  box.appendChild(btn);
+}
+
+// 상태 박스가 항상 보이도록 이벤트 등록
+window.addEventListener('DOMContentLoaded', showAutoActionStateBox);
+window.addEventListener('load', showAutoActionStateBox);
+window.addEventListener('locationchange', showAutoActionStateBox);
+
+// SPA 환경에서 상태 박스가 사라지지 않게 MutationObserver로 복구
+const autoActionStateBoxObserver = new MutationObserver(() => {
+  if (!document.getElementById('auto-action-state-box')) {
+    showAutoActionStateBox();
+  }
+});
+autoActionStateBoxObserver.observe(document.body, { childList: true, subtree: true });
+
+// ... existing code ...
+window.setAutoActionState = setAutoActionState;
+window.getAutoActionState = getAutoActionState;
